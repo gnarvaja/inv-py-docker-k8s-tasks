@@ -7,6 +7,9 @@ https://github.com/pypa/sampleproject
 
 # Always prefer setuptools over distutils
 from setuptools import setup, find_packages
+import os
+import re
+import ast
 from os import path
 # io.open is needed for projects that support Python 2.7
 # It ensures open() defaults to text mode with universal newlines,
@@ -20,12 +23,21 @@ here = path.abspath(path.dirname(__file__))
 with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
-# Arguments marked as "Required" below must be included for upload to PyPI.
-# Fields marked as "Optional" may be commented out.
+CURDIR = os.path.abspath(os.path.dirname(__file__))
+
+
+def get_version():
+    main_file = os.path.join(CURDIR, "src/py_docker_k8s_tasks", "__init__.py")
+    _version_re = re.compile(r"__version__\s+=\s+(?P<version>.*)")
+    with open(main_file, "r", encoding="utf8") as f:
+        match = _version_re.search(f.read())
+        version = match.group("version") if match is not None else '"unknown"'
+    return str(ast.literal_eval(version))
+
 
 setup(
     name='inv-py-docker-k8s-tasks',  # Required
-    version='0.0.1',  # Required
+    version=get_version(),  # Required
     description="Common Inkove tasks for working with Python/Docker/K8s",
     long_description=long_description,  # Optional
     long_description_content_type='text/markdown',  # Optional (see note above)

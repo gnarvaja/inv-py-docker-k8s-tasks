@@ -18,7 +18,7 @@ fi
 if mount | grep -q {path}; then
     echo "ramdisk already mounted!"
 else
-    {sudo} mount -t tmpfs -o size={size} tmpfs {0}
+    {sudo} mount -t tmpfs -o size={size} tmpfs {path}
     echo Done! umount {path} to release the memory
 fi
 """
