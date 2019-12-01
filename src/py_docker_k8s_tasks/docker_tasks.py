@@ -71,7 +71,7 @@ def stop(c):
 
 @task
 def shell(c):
-    shell = c.config.container_shell or "sh"
+    shell = c.config.get("container_shell", "sh")
     docker_exec(c, shell)
 
 
