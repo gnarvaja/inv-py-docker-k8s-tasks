@@ -23,6 +23,11 @@ def migrate(c):
 
 
 @task
+def manage(c, command):
+    docker_exec(c, "./manage.py {}".format(command))
+
+
+@task
 def create_su(c, username="admin", email="testing@gogames.co"):
     docker_exec(c, "./manage.py createsuperuser --username {} --email {}".format(username, email))
 

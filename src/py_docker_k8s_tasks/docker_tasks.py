@@ -11,12 +11,35 @@ def _get_aws_token(c):
     return token
 
 
+def _version_to_int(version):
+    """Converts a version number into an integer number, so it can be sorted
+
+    >>> _version_to_int("0.1.1")
+    1001
+    >>> _version_to_int("1.2.3")
+    1002003
+    >>> _version_to_int("2001")
+    2001
+    """
+    components = version.split(".")
+    ret = 0
+    for i, comp in enumerate(components):
+        ret += int(comp) * (1000 ** (len(components) - (i + 1)))
+    return ret
+
+
 def _get_last_version(c, registry, image):
     token = _get_aws_token(c)
     url = 'https://{}/v2/{}/tags/list'.format(registry, image)
     r = requests.get(url, headers={'Authorization': 'Basic {}'.format(token)})
     r.raise_for_status()
-    return sorted(r.json()['tags'])[-1]
+    tags = r.json()['tags']
+    if len(tags) == 100:
+        raise RuntimeError(
+            "Error, the response has 100 tags, we hit the limit and paging not supported, "
+            "you should remove some tags in ECR console"
+        )
+    return sorted(tags, key=_version_to_int)[-1]
 
 
 def _get_next_version(c, registry, image):
@@ -46,7 +69,7 @@ def last_version(c, registry=None, image=None):
 @task
 def next_version(c, registry=None, image=None):
     registry, image = _default_registry_image(c, registry, image)
-    print(_get_next_version(registry, image))
+    print(_get_next_version(c, registry, image))
 
 
 def docker_exec(c, command, container=None, pty=True):
