@@ -36,3 +36,8 @@ def create_su(c, username="admin", email="testing@gogames.co"):
 def coverage(c):
     docker_exec(c, "coverage run --source=. manage.py test")
     docker_exec(c, "coverage html")
+
+
+@task
+def migrate_cache(c):
+    docker_exec(c, './manage.py createcachetable')
