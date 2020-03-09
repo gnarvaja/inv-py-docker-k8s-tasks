@@ -72,9 +72,27 @@ def next_version(c, registry=None, image=None):
     print(_get_next_version(c, registry, image))
 
 
-def docker_exec(c, command, container=None, pty=True):
+def docker_exec(c, command, container=None, pty=True, envs={}):
     container = container or c.config.container
-    c.run("docker exec {} {} {}".format("-it" if pty else "", container, command), pty=True)
+    run_command = "docker exec "
+    if pty:
+        run_command += "-it "
+    for env_var, env_value in envs.items():
+        run_command += f"--env {env_var}={env_value} "
+
+    c.run("{} {} {}".format(run_command, container, command), pty=pty)
+
+
+@task
+def docker_put(c, source, target, container=None):
+    container = container or c.config.container
+    c.run(f"docker cp {source} {container}:{target}")
+
+
+@task
+def docker_get(c, source, target, container=None):
+    container = container or c.config.container
+    c.run(f"docker cp {container}:{source} {target}")
 
 
 @task
