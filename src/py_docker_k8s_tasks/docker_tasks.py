@@ -11,6 +11,13 @@ def _get_aws_token(c):
     return token
 
 
+def _get_gcloud_token(c):
+    token = os.getenv("GCLOUD_TOKEN")
+    if not token:
+        token = c.run("gcloud auth print-access-token", hide=True).stdout.strip()
+    return token
+
+
 def _version_to_int(version):
     """Converts a version number into an integer number, so it can be sorted
 
@@ -20,7 +27,11 @@ def _version_to_int(version):
     1002003
     >>> _version_to_int("2001")
     2001
+    >>> _version_to_int("latest")
+    0
     """
+    if version == "latest":
+        return 0
     components = version.split(".")
     ret = 0
     for i, comp in enumerate(components):
@@ -28,10 +39,20 @@ def _version_to_int(version):
     return ret
 
 
+def _auth_headers(c, registry):
+    if "amazonaws" in registry:
+        token = _get_aws_token(c)
+        return dict(headers={'Authorization': 'Basic {}'.format(token)})
+    elif "gcr.io" in registry:
+        token = _get_gcloud_token(c)
+        return dict(auth=("oauth2accesstoken", token))
+    else:
+        return {}
+
+
 def _get_last_version(c, registry, image):
-    token = _get_aws_token(c)
     url = 'https://{}/v2/{}/tags/list'.format(registry, image)
-    r = requests.get(url, headers={'Authorization': 'Basic {}'.format(token)})
+    r = requests.get(url, **_auth_headers(c, registry))
     r.raise_for_status()
     tags = r.json()['tags']
     if len(tags) == 100:
@@ -127,6 +148,7 @@ def build(c, registry=None, image=None, version=None):
 def push_image(c, registry=None, image=None, version=None):
     registry, image = _default_registry_image(c, registry, image)
     version = version or _get_next_version(c, registry, image)
-    docker_login_cmd = c.run("aws ecr get-login --no-include-email", hide=True).stdout
-    c.run(docker_login_cmd)
+    if "amazonaws" in registry:
+        docker_login_cmd = c.run("aws ecr get-login --no-include-email", hide=True).stdout
+        c.run(docker_login_cmd)
     c.run("docker push {}/{}:{}".format(registry, image, version))
