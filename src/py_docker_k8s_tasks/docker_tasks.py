@@ -117,8 +117,13 @@ def docker_get(c, source, target, container=None):
 
 
 @task
-def start_dev(c):
-    c.run("docker-compose -f docker-compose.yml -f docker-compose.override.dev.yml up --build -d")
+def start_dev(c, compose_files="docker-compose.override.dev.yml,docker-compose.override.local-dev.yml"):
+    extra_param = ""
+    for compose_file in compose_files.split(","):
+        if os.path.exists(compose_file):
+            extra_param += f"-f {compose_file} "
+
+    c.run(f"docker-compose -f docker-compose.yml {extra_param} up --build -d")
 
 
 @task
@@ -135,6 +140,11 @@ def stop(c):
 def shell(c):
     shell = c.config.get("container_shell", "sh")
     docker_exec(c, shell)
+
+
+@task
+def pyshell(c):
+    docker_exec(c, "python")
 
 
 @task
