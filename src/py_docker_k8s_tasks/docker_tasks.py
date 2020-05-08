@@ -1,4 +1,5 @@
 import os
+import re
 import requests
 from invoke import task
 
@@ -39,18 +40,40 @@ def _version_to_int(version):
     return ret
 
 
-def _auth_headers(c, registry):
+def _registry_type(registry):
     if "amazonaws" in registry:
+        return "aws"
+    elif "gcr.io" in registry:
+        return "googlecloud"
+    elif "icr.io" in registry:
+        return "ibmcloud"
+    else:
+        return "unknown"
+
+
+def _auth_headers(c, registry):
+    if _registry_type(registry) == "aws":
         token = _get_aws_token(c)
         return dict(headers={'Authorization': 'Basic {}'.format(token)})
-    elif "gcr.io" in registry:
+    elif _registry_type(registry) == "googlecloud":
         token = _get_gcloud_token(c)
         return dict(auth=("oauth2accesstoken", token))
     else:
         return {}
 
 
+def _get_last_version_from_local_docker(c, registry, image):
+    output = c.run(f"docker image ls {registry}/{image}", hide="out")
+    # Black magic explanation: skips first line (header), 2nd field is version
+    tags = [re.split(" +", l)[1] for l in output.stdout.splitlines()[1:]]
+    return sorted(tags, key=_version_to_int)[-1]
+
+
 def _get_last_version(c, registry, image):
+    if _registry_type(registry) == "ibmcloud":
+        # fallback, don't know how to get tabs from ibmcloud registry
+        return _get_last_version_from_local_docker(c, registry, image)
+
     url = 'https://{}/v2/{}/tags/list'.format(registry, image)
     r = requests.get(url, **_auth_headers(c, registry))
     r.raise_for_status()
@@ -157,8 +180,12 @@ def build(c, registry=None, image=None, version=None):
 @task
 def push_image(c, registry=None, image=None, version=None):
     registry, image = _default_registry_image(c, registry, image)
-    version = version or _get_next_version(c, registry, image)
-    if "amazonaws" in registry:
+    if not version:
+        if _registry_type(registry) == "ibmcloud":
+            version = _get_last_version_from_local_docker(c, registry, image)
+        else:
+            version = _get_next_version(c, registry, image)
+    if _registry_type(registry) == "aws":
         docker_login_cmd = c.run("aws ecr get-login --no-include-email", hide=True).stdout
         c.run(docker_login_cmd)
     c.run("docker push {}/{}:{}".format(registry, image, version))
