@@ -11,8 +11,7 @@ def kubectl(c, command, **kargs):
     return c.run(f"kubectl {command}", env=env, **kargs)
 
 
-@task
-def apply(c, manifest):
+def _applydelete(c, manifest, action="apply"):
     if manifest == "-":
         manifests = [f.strip() for f in sys.stdin.readlines()]
     else:
@@ -23,8 +22,18 @@ def apply(c, manifest):
         if not os.path.isfile(mfile):
             print(f"{mfile} does not exists!", file=sys.stderr)
             continue
-        ret = kubectl(c, f"apply -f {mfile}")
+        ret = kubectl(c, f"{action} -f {mfile}")
     return ret
+
+
+@task
+def apply(c, manifest):
+    return _applydelete(c, manifest, "apply")
+
+
+@task
+def kdelete(c, manifest):
+    return _applydelete(c, manifest, "delete")
 
 
 @task
@@ -55,8 +64,11 @@ def _fuzzy_find_pod(c, podname):
         aux = [p for p in podnames if podname in p]
         if aux and len(aux) == 1:
             podname = aux[0]
+        elif len(aux) > 1:
+            podnames = ", ".join(aux)
+            raise Failure(f"More than one pod matching {podname}: {podnames}!")
         else:
-            podnames = ",".join(podnames)
+            podnames = ", ".join(podnames)
             raise Failure(f"{podname} not found in pods: {podnames}!")
     return podname
 
