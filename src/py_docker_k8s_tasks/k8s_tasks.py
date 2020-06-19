@@ -32,8 +32,21 @@ def apply(c, manifest):
 
 
 @task
-def kdelete(c, manifest):
-    return _applydelete(c, manifest, "delete")
+def kdelete(c, manifest, resource=None):
+    if manifest == "-" or os.path.isfile(manifest):
+        return _applydelete(c, manifest, "delete")
+    else:
+        resource = resource or "pod"
+        kubectl(c, f"delete {resource} {manifest}")
+
+
+@task
+def kdescribe(c, resource, name, namespace=None):
+    if namespace:
+        namespace = f" -n {namespace}"
+    else:
+        namespace = ""
+    kubectl(c, f"describe {resource} {name}{namespace}")
 
 
 @task
@@ -74,12 +87,24 @@ def _fuzzy_find_pod(c, podname):
 
 
 @task
-def logs(c, podname, zfuzzy=False, follow=False, tail=None):
+def logs(c, podname, zfuzzy=False, app=False, name=False, follow=False, tail=None,
+         container=None, max_log_requests=None):
     if zfuzzy:
         podname = _fuzzy_find_pod(c, podname)
+    elif app:
+        podname = f"-l app={podname}"
+    elif name:
+        podname = f"-l name={podname}"
+
+    if max_log_requests:
+        max_log_requests = f"--max-log-requests {max_log_requests}"
+    else:
+        max_log_requests = ""
+
     follow = "--follow" if follow else ""
     tail = f"--tail {tail}" if tail else ""
-    return kubectl(c, f"logs {podname} {follow} {tail}")
+    container = f"-c {container}" if container else ""
+    return kubectl(c, f"logs {podname} {follow} {tail} {container} {max_log_requests}")
 
 
 @task
@@ -95,13 +120,20 @@ def ktop(c, resource="nodes"):
 
 
 @task
-def kget(c, resource="pods", grep=None, status=None, keep_header=True):
+def kget(c, resource="pods", grep=None, status=None, keep_header=True, namespace=None):
     if grep:
         hide = "out"
     else:
         hide = None
 
-    out = kubectl(c, f"get {resource}", hide=hide)
+    if namespace is None:
+        namespace = ""
+    elif namespace == "all":
+        namespace = "--all-namespaces"
+    else:
+        namespace = f"-n={namespace}"
+
+    out = kubectl(c, f"get {resource} {namespace}", hide=hide)
     if hide is None:
         return
 

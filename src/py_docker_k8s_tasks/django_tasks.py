@@ -28,6 +28,22 @@ def manage(c, command):
 
 
 @task
+def makemessages(c, language=None):
+    if language:
+        languages = [language]
+    else:
+        languages = c.config.translations.languages
+    extra_params = c.config.translations.get("extra_params", [])
+    for lang in languages:
+        docker_exec(c, "./manage.py makemessages -l {} {}".format(lang, " ".join(extra_params)))
+
+
+@task
+def compilemessages(c, language=None):
+    docker_exec(c, "./manage.py compilemessages" + ("-l {}".format(language) if language else ""))
+
+
+@task
 def create_su(c, username="admin", email="testing@gogames.co"):
     docker_exec(c, "./manage.py createsuperuser --username {} --email {}".format(username, email))
 
