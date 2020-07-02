@@ -124,6 +124,11 @@ def docker_exec(c, command, container=None, pty=True, envs={}):
     for env_var, env_value in envs.items():
         run_command += f"--env {env_var}={env_value} "
 
+    for k, env_value in os.environ.items():
+        if k.startswith("DOCKEREXEC_"):
+            env_var = k.split('_', 1)[1]
+            run_command += f"--env {env_var}={env_value} "
+
     c.run("{} {} {}".format(run_command, container, command), pty=pty)
 
 

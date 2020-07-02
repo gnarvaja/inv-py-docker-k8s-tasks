@@ -55,7 +55,7 @@ def kc(c, command):
 
 
 @task
-def config_from_dir(c, name, directory, secret=False):
+def config_from_dir(c, name, directory, secret=False, create=False):
     config = "secret" if secret else "configmap"
     command = f"create"
     if secret:
@@ -67,6 +67,8 @@ def config_from_dir(c, name, directory, secret=False):
     if kubectl(c, f"get {config} {name}", warn=True, hide="both"):
         # Exists
         command += " -o yaml --dry-run=client | kubectl replace -f -"
+    elif not create:
+        raise Failure(f"{config} does not exist, add --create if you want to create")
     return kubectl(c, command)
 
 
