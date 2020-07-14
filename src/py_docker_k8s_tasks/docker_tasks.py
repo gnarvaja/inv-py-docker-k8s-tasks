@@ -47,8 +47,16 @@ def _registry_type(registry):
         return "googlecloud"
     elif "icr.io" in registry:
         return "ibmcloud"
+    elif registry == "":
+        return "dockerhub"
     else:
         return "unknown"
+
+
+def _join(registry, image):
+    if not registry:
+        return image
+    return "{}/{}".format(registry, image)
 
 
 def _auth_headers(c, registry):
@@ -63,7 +71,8 @@ def _auth_headers(c, registry):
 
 
 def _get_last_version_from_local_docker(c, registry, image):
-    output = c.run(f"docker image ls {registry}/{image}", hide="out")
+    registry_image = _join(registry, image)
+    output = c.run(f"docker image ls {registry_image}", hide="out")
     # Black magic explanation: skips first line (header), 2nd field is version
     tags = [re.split(" +", l)[1] for l in output.stdout.splitlines()[1:]]
     return sorted(tags, key=_version_to_int)[-1]
@@ -178,19 +187,21 @@ def pyshell(c):
 @task
 def build(c, registry=None, image=None, version=None):
     registry, image = _default_registry_image(c, registry, image)
+    registry_image = _join(registry, image)
     version = version or _get_next_version(c, registry, image)
-    c.run("docker build -t {}/{}:{} .".format(registry, image, version))
+    c.run("docker build -t {}:{} .".format(registry_image, version))
 
 
 @task
 def push_image(c, registry=None, image=None, version=None):
     registry, image = _default_registry_image(c, registry, image)
     if not version:
-        if _registry_type(registry) == "ibmcloud":
+        if _registry_type(registry) in ("ibmcloud", "dockerhub"):
             version = _get_last_version_from_local_docker(c, registry, image)
         else:
             version = _get_next_version(c, registry, image)
     if _registry_type(registry) == "aws":
         docker_login_cmd = c.run("aws ecr get-login --no-include-email", hide=True).stdout
         c.run(docker_login_cmd)
-    c.run("docker push {}/{}:{}".format(registry, image, version))
+    registry_image = _join(registry, image)
+    c.run("docker push {}:{}".format(registry_image, version))

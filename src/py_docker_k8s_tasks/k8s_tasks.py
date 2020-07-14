@@ -122,7 +122,7 @@ def ktop(c, resource="nodes"):
 
 
 @task
-def kget(c, resource="pods", grep=None, status=None, keep_header=True, namespace=None):
+def kget(c, resource="pods", grep=None, status=None, keep_header=True, namespace=None, name=None, app=None):
     if grep:
         hide = "out"
     else:
@@ -135,7 +135,13 @@ def kget(c, resource="pods", grep=None, status=None, keep_header=True, namespace
     else:
         namespace = f"-n={namespace}"
 
-    out = kubectl(c, f"get {resource} {namespace}", hide=hide)
+    label_filter = ""
+    if app:
+        label_filter += f" -l app={app}"
+    if name:
+        label_filter += f" -l name={name}"
+
+    out = kubectl(c, f"get {resource} {namespace}{label_filter}", hide=hide)
     if hide is None:
         return
 

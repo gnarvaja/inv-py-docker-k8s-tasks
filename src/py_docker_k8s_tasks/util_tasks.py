@@ -7,6 +7,14 @@ REGEX_TYPE = type(re.compile('hello, world'))
 
 
 @task
+def export_env(c):
+    env = getattr(c.config, "env", {})
+    for k, v in env.items():
+        c.run(f"export {k}={v}")
+        print(f"export {k}={v}")
+
+
+@task
 def sleep(c, sleep_time=5):
     time.sleep(sleep_time)
 

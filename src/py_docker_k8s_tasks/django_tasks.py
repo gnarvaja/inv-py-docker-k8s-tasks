@@ -8,6 +8,27 @@ def django(c, port=8000):
 
 
 @task
+def gunicorn(c, port=8000):
+    gunicorn_config = c.config.get("gunicorn_config", "/usr/local/app/gunicorn.py")
+    if gunicorn_config:
+        config = f"--config {gunicorn_config}"
+    else:
+        config = ""
+    wsgi_app = c.config.get("wsgi_app", None)
+    if wsgi_app is None:
+        app = c.config.app
+        wsgi_app = f"{app}.wsgi:application"
+    docker_exec(c, f"/usr/local/bin/gunicorn {config} -b :{port} {wsgi_app}")
+
+
+@task
+def celery(c):
+    app = c.config.app
+    celery_args = c.config.get("celery_args", "-P solo -c1")
+    docker_exec(c, f"celery worker --app={app} {celery_args}")
+
+
+@task
 def djshell(c):
     docker_exec(c, "./manage.py shell")
 
