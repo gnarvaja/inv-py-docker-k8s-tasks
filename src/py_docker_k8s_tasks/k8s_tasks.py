@@ -2,6 +2,7 @@ import os
 import re
 import sys
 import tempfile
+import base64
 import yaml
 from invoke import task, Failure
 
@@ -9,6 +10,18 @@ from invoke import task, Failure
 def kubectl(c, command, **kargs):
     env = getattr(c.config, "env", {})
     return c.run(f"kubectl {command}", env=env, **kargs)
+
+
+def get_annotation(c, resource, name, annotation):
+    command = f"get {resource} {name} -o=jsonpath='{{.metadata.annotations.{annotation}}}'"
+    ret = kubectl(c, command, hide=True)
+    return ret.stdout
+
+
+def _normalize(dirname):
+    if not dirname.endswith("/"):
+        return dirname + "/"
+    return dirname
 
 
 def _applydelete(c, manifest, action="apply"):
@@ -50,26 +63,79 @@ def kdescribe(c, resource, name, namespace=None):
 
 
 @task
+def krollout(c, name, action="restart", namespace=None):
+    if namespace:
+        namespace = f" -n {namespace}"
+    else:
+        namespace = ""
+    if "/" not in name:
+        name = "deployment/" + name
+    kubectl(c, f"rollout {action} {name}{namespace}")
+
+
+@task
 def kc(c, command):
     return kubectl(c, command)
 
 
+YTT_CREATE_CONFIGMAP = """#@ load("@ytt:data", "data")
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: #@ data.values.name
+  annotations: #@ data.values.annotations
+data: #@ data.values.files
+"""
+
+
+YTT_CREATE_SECRET = """#@ load("@ytt:data", "data")
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+  name: #@ data.values.name
+  annotations: #@ data.values.annotations
+data: #@ data.values.files
+"""
+
+
 @task
-def config_from_dir(c, name, directory, secret=False, create=False):
+def config_from_dir(c, name, directory=None, secret=False):
     config = "secret" if secret else "configmap"
-    command = f"create"
-    if secret:
-        command += f" secret generic {name}"
-    else:
-        command += f" configmap {name}"
+
+    if "/" in name and os.path.isdir(name) and not directory:
+        # name parameter is the directory, find the name of the configmap/secret
+        name = _normalize(name)
+        names = kubectl(c, f"get {config} -o=name", hide=True).stdout.splitlines()
+        for n in names:
+            n = n.split("/")[1]  # removes resource prefix
+            if name == get_annotation(c, config, n, "config-from-dir"):
+                directory, name = name, n
+                break
+        if not directory:
+            raise Failure(f"No existing {config} found with config-from-dir={name}")
+
+    if directory is None:
+        directory = get_annotation(c, config, name, "config-from-dir")
+        if not directory:
+            raise Failure(f"Missing directory parameter and annotation not found")
+
+    directory = _normalize(directory)
+
+    template_file = tempfile.NamedTemporaryFile(suffix=".yaml", mode="wt")
+    template_file.write(YTT_CREATE_SECRET if secret else YTT_CREATE_CONFIGMAP)
+    template_file.flush()
+
+    values = {"name": name, "annotations": {"config-from-dir": directory}, "files": {}}
+
     for filename in os.listdir(directory):
-        command += " --from-file " + os.path.join(directory, filename)
-    if kubectl(c, f"get {config} {name}", warn=True, hide="both"):
-        # Exists
-        command += " -o yaml --dry-run=client | kubectl replace -f -"
-    elif not create:
-        raise Failure(f"{config} does not exist, add --create if you want to create")
-    return kubectl(c, command)
+        file_str = open(os.path.join(directory, filename), "rb" if secret else "rt").read()
+        if secret:
+            values["files"][filename] = base64.b64encode(file_str)
+        else:
+            values["files"][filename] = file_str
+
+    return run_ytt(c, template_file.name, values, apply=True)
 
 
 def _fuzzy_find_pod(c, podname):
@@ -170,6 +236,10 @@ def run_ytt(c, template, values=None, output_file=None, apply=False, **kargs):
         output = ""
 
     f_param = " ".join(f_param)
+
+    if apply and not output_file:
+        env = getattr(c.config, "env", {})
+        return c.run(f"ytt {f_param} | kubectl apply -f -", env=env, **kargs)
 
     ret = c.run(f"ytt {f_param} {output}", **kargs)
 
