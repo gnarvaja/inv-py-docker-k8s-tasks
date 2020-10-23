@@ -79,7 +79,7 @@ def _get_last_version_from_local_docker(c, registry, image):
 
 
 def _get_last_version(c, registry, image):
-    if _registry_type(registry) == "ibmcloud":
+    if _registry_type(registry) in ("ibmcloud", "dockerhub"):
         # fallback, don't know how to get tabs from ibmcloud registry
         return _get_last_version_from_local_docker(c, registry, image)
 

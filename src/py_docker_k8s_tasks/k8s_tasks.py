@@ -32,10 +32,14 @@ def _applydelete(c, manifest, action="apply"):
                      if f.strip()]
     ret = None
     for mfile in manifests:
-        if not os.path.isfile(mfile):
+        is_file = os.path.isfile(mfile)
+        if not is_file and action == "apply":
             print(f"{mfile} does not exists!", file=sys.stderr)
-            continue
-        ret = kubectl(c, f"{action} -f {mfile}")
+        elif not is_file:  # action == delete
+            # Assume it's pod to delete - To support multiple delete from stdin
+            ret = kubectl(c, f"{action} pod {mfile}")
+        else:
+            ret = kubectl(c, f"{action} -f {mfile}")
     return ret
 
 
@@ -183,16 +187,49 @@ def kshell(c, podname, zfuzzy=False, shell="sh"):
 
 
 @task
-def ktop(c, resource="nodes"):
-    return kubectl(c, f"top {resource}")
+def ktop(c, resource="nodes", cpu=None, memory=None):
+    command =f"top {resource}"
+    if cpu is None and memory is None:
+        return kubectl(c, command)
+
+    cpu = cpu and int(cpu)
+    memory = memory and int(memory)
+
+    out = kubectl(c, command, hide=True)
+    lines = out.stdout.splitlines()
+
+    for line in lines:
+        line_cpu = re.findall(r"\s(\d+)m", line)
+        line_memory = re.findall(r"\s(\d+)Mi", line)
+        if cpu and line_cpu:
+            line_cpu = int(line_cpu[0])
+            if cpu > 0 and line_cpu < cpu:
+                # Skip lines with LESS than CPU parameter
+                continue
+            if cpu < 0 and line_cpu > -cpu:
+                # Skip lines with MORE than CPU parameter
+                continue
+        if memory and line_memory:
+            line_memory = int(line_memory[0])
+            if memory > 0 and line_memory < memory:
+                # Skip lines with LESS than memory parameter
+                continue
+            if memory < 0 and line_memory > -memory:
+                # Skip lines with MORE than memory parameter
+                continue
+        print(line.rstrip("\n"))
 
 
 @task
-def kget(c, resource="pods", grep=None, status=None, keep_header=True, namespace=None, name=None, app=None):
+def kget(c, resource="pods", grep=None, status=None, keep_header=True, namespace=None,
+         name=None, app=None, llist=False):
     if grep:
         hide = "out"
     else:
         hide = None
+
+    if llist:
+        keep_header = False
 
     if namespace is None:
         namespace = ""
@@ -216,8 +253,13 @@ def kget(c, resource="pods", grep=None, status=None, keep_header=True, namespace
     if grep:
         lines = [l for i, l in enumerate(lines) if grep in l or keep_header and i == 0]
 
-    for l in lines:
-        print(l.rstrip("\n"))
+    if llist:
+        for l in lines:
+            # Only first column, the name
+            print(l.split()[0])
+    else:
+        for l in lines:
+            print(l.rstrip("\n"))
 
 
 def run_ytt(c, template, values=None, output_file=None, apply=False, **kargs):
