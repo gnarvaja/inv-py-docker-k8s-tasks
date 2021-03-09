@@ -24,7 +24,7 @@ def _normalize(dirname):
     return dirname
 
 
-def _applydelete(c, manifest, action="apply"):
+def _applydelete(c, manifest, action="apply", extra_params=""):
     if manifest == "-":
         manifests = [f.strip() for f in sys.stdin.readlines()]
     else:
@@ -37,9 +37,9 @@ def _applydelete(c, manifest, action="apply"):
             print(f"{mfile} does not exists!", file=sys.stderr)
         elif not is_file:  # action == delete
             # Assume it's pod to delete - To support multiple delete from stdin
-            ret = kubectl(c, f"{action} pod {mfile}")
+            ret = kubectl(c, f"{action} {extra_params} pod {mfile}")
         else:
-            ret = kubectl(c, f"{action} -f {mfile}")
+            ret = kubectl(c, f"{action} {extra_params} -f {mfile}")
     return ret
 
 
@@ -49,12 +49,13 @@ def apply(c, manifest):
 
 
 @task
-def kdelete(c, manifest, resource=None):
+def kdelete(c, manifest, resource=None, force=False):
+    force = "--force --grace-period=0" if force else ""
     if manifest == "-" or os.path.isfile(manifest):
-        return _applydelete(c, manifest, "delete")
+        return _applydelete(c, manifest, "delete", force)
     else:
         resource = resource or "pod"
-        kubectl(c, f"delete {resource} {manifest}")
+        kubectl(c, f"delete {resource} {force} {manifest}")
 
 
 @task
@@ -222,7 +223,7 @@ def ktop(c, resource="nodes", cpu=None, memory=None):
 
 @task
 def kget(c, resource="pods", grep=None, status=None, keep_header=True, namespace=None,
-         name=None, app=None, llist=False):
+         name=None, app=None, llist=False, wide=False, node=None):
     if grep:
         hide = "out"
     else:
@@ -244,7 +245,13 @@ def kget(c, resource="pods", grep=None, status=None, keep_header=True, namespace
     if name:
         label_filter += f" -l name={name}"
 
-    out = kubectl(c, f"get {resource} {namespace}{label_filter}", hide=hide)
+    options = ""
+    if wide:
+        options += " -o wide"
+    if node:
+        options += f" --field-selector spec.nodeName={node}"
+
+    out = kubectl(c, f"get {resource} {namespace}{label_filter}{options}", hide=hide)
     if hide is None:
         return
 
