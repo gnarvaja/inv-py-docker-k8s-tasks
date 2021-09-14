@@ -74,7 +74,7 @@ def _get_last_version_from_local_docker(c, registry, image):
     registry_image = _join(registry, image)
     output = c.run(f"docker image ls {registry_image}", hide="out")
     # Black magic explanation: skips first line (header), 2nd field is version
-    tags = [re.split(" +", l)[1] for l in output.stdout.splitlines()[1:]]
+    tags = [re.split(" +", lin)[1] for lin in output.stdout.splitlines()[1:]]
     return sorted(tags, key=_version_to_int)[-1]
 
 
@@ -155,24 +155,32 @@ def docker_get(c, source, target, container=None):
     c.run(f"docker cp {container}:{source} {target}")
 
 
+def _compose_file():
+    return os.getenv("COMPOSE_FILE", "docker-compose.yml")
+
+
 @task
-def start_dev(c, compose_files="docker-compose.override.dev.yml,docker-compose.override.local-dev.yml"):
+def start_dev(c, compose_files="docker-compose.override.dev.yml,docker-compose.override.local-dev.yml",
+              detach=True):
     extra_param = ""
     for compose_file in compose_files.split(","):
         if os.path.exists(compose_file):
             extra_param += f"-f {compose_file} "
 
-    c.run(f"docker-compose -f docker-compose.yml {extra_param} up --build -d")
+    detach = "-d" if detach else ""
+
+    c.run(f"docker-compose -f {_compose_file()} {extra_param} up --build {detach}")
 
 
 @task
-def start(c):
-    c.run("docker-compose -f docker-compose.yml --build -d")
+def start(c, detach=True):
+    detach = "-d" if detach else ""
+    c.run(f"docker-compose -f {_compose_file()} up --build {detach}")
 
 
 @task
 def stop(c):
-    c.run("docker-compose down")
+    c.run(f"docker-compose down -f {_compose_file()}")
 
 
 @task
