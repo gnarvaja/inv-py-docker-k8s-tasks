@@ -45,6 +45,8 @@ def _registry_type(registry):
         return "aws"
     elif "gcr.io" in registry:
         return "googlecloud"
+    elif "pkg.dev" in registry:
+        return "googlecloud"
     elif "icr.io" in registry:
         return "ibmcloud"
     elif registry == "":
@@ -125,13 +127,15 @@ def next_version(c, registry=None, image=None):
     print(_get_next_version(c, registry, image))
 
 
-def docker_exec(c, command, container=None, pty=True, envs={}, workdir=None):
+def docker_exec(c, command, container=None, pty=True, envs={}, workdir=None, user=None):
     container = container or c.config.container
     run_command = "docker exec "
     if pty:
         run_command += "-it "
+    if user:
+        run_command += f"-u {user} "
     if workdir:
-        run_command += f"-w {workdir}"
+        run_command += f"-w {workdir} "
     for env_var, env_value in envs.items():
         run_command += f"--env {env_var}={env_value} "
 

@@ -25,7 +25,14 @@ def gunicorn(c, port=8000):
 def celery(c):
     app = c.config.app
     celery_args = c.config.get("celery_args", "-P solo -c1")
-    docker_exec(c, f"celery worker --app={app} {celery_args}")
+    docker_exec(c, f"celery --app={app} worker {celery_args}")
+
+
+@task
+def cbeat(c):
+    app = c.config.app
+    cbeat_args = c.config.get("cbeat_args", "--scheduler django")
+    docker_exec(c, f"celery --app={app} beat {cbeat_args}")
 
 
 @task
