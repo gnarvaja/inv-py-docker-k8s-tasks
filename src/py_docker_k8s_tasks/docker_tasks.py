@@ -173,18 +173,18 @@ def start_dev(c, compose_files="docker-compose.override.dev.yml,docker-compose.o
 
     detach = "-d" if detach else ""
 
-    c.run(f"docker-compose -f {_compose_file()} {extra_param} up --build {detach}")
+    c.run(f"docker compose -f {_compose_file()} {extra_param} up --build {detach}")
 
 
 @task
 def start(c, detach=True):
     detach = "-d" if detach else ""
-    c.run(f"docker-compose -f {_compose_file()} up --build {detach}")
+    c.run(f"docker compose -f {_compose_file()} up --build {detach}")
 
 
 @task
 def stop(c):
-    c.run(f"docker-compose down -f {_compose_file()}")
+    c.run(f"docker compose down -f {_compose_file()}")
 
 
 @task
