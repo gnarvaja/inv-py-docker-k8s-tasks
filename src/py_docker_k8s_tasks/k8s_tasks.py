@@ -9,6 +9,8 @@ from invoke import task, Failure
 
 def kubectl(c, command, **kargs):
     env = getattr(c.config, "env", {})
+    if "KUBECONFIG" not in env and "KUBECONFIG" in os.environ:
+        env["KUBECONFIG"] = os.environ["KUBECONFIG"]
     return c.run(f"kubectl {command}", env=env, **kargs)
 
 
